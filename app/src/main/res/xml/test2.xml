@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<deployableUnit group="my.test.test2" id="my.test.test2.DU2_1" name="DU2_1">
+	<consmerPorts>
+		<consumerPort name="A" />
+	</consmerPorts>
+	<providerPorts>
+		<consumerPort name="B" />
+	</providerPorts>
+</deployableUnit>

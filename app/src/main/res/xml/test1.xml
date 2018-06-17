@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<deployableUnit group="my.test.test1" id="my.test.test1.DU1_1" name="DU1_1">
+	<consmerPorts>
+		<consumerPort name="A" />
+	</consmerPorts>
+	<providerPorts>
+		<consumerPort name="B" />
+	</providerPorts>
+	<composition>
+		<consumerPorts>
+			<consumerPort consumerId="my.test.test1.aCns" id="aConsumer"/>
+		</consumerPorts>
+		<providerPorts>
+			<providerPort providerId="my.test.test1.bPrv" id="bProvider"/>
+		</providerPorts>
+		<components>
+			<component activatorClass="my.test.test1.component.L1_1" id="my.test.test1.component.L1_1">
+				<consumers>
+					<consumer componentProperty="aCns" id="my.test.test1.aCns" multiplicity="One" scope="L0" serviceClass="my.test.api.test1.services.A"/>
+				</consumers>
+				<providers>
+					<provider componentProperty="bPrv" id="my.test.test1.bPrv" multiplicity="One" scope="L0" serviceClass="my.test.api.test1.services.B"/>
+				</providers>
+			</component>
+		</components>
+		<wirings></wirings>
+	</composition>
+</deployableUnit>
