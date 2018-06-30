@@ -8,51 +8,110 @@ import android.graphics.drawable.shapes.*;
 import android.os.*;
 import android.view.*;
 import android.webkit.*;
-import android.widget.*;
 import java.io.*;
 import java.net.*;
+import java.nio.charset.*;
 import java.util.*;
 import javax.xml.parsers.*;
 import org.w3c.dom.*;
 import org.xml.sax.*;
-import a.polverini.my.MainActivity.DisplayActivity.*;
-import android.graphics.Paint.*;
-import java.nio.charset.*;
-import a.polverini.my.MainActivity.*;
-import java.text.*;
-import android.content.res.*;
-import org.xmlpull.v1.*;
+import android.widget.*;
+import android.content.SharedPreferences.*;
 
 public class MainActivity extends Activity 
 {
+	// constants
 	public static final String EXTRA_MESSAGE = "a.polverini.my.MESSAGE";
-	public static final String EXTRA_ITEM = "a.polverini.my.ITEM";
-	
+	public static final String EXTRA_ITEM    = "a.polverini.my.ITEM";
 	public static final String NEXUS = "";
 	public static final String GIT  = "";
-	
+
+	// preferences
+	private SharedPreferences preferences;
 	private boolean verbose = true;
+	private File rootdir = null;
+	private File dudir = null;
+
+	// display
 	private Handler handler = null;
 	private WebView webView = null;
 	private Menu menu;
-	
-	private File topdir;
-	private File dudir;
-	
-	private Settings settings;
-	private Map<String, String> alias = new HashMap<>();
-	
-	private Item root;
-	private File tmp;
-	private Logger log;
-	
+
+	// data
+	private Item root = new Item();
+
+	public static final Map<String, String> deployableUnits = new HashMap<>();
+
+	void duInit() {
+		try {
+			List<String> keys = new ArrayList<>();
+
+			for(Object key : preferences.getAll().keySet()) {
+				if(key instanceof String && ((String)key).startsWith("du:")) {
+					keys.add(((String)key).split(":",2)[1]);
+				}
+			}
+
+			for(String key : keys) {
+				deployableUnits.put(key, preferences.getString("du:"+key, ""));
+			}
+		} catch(Exception e) {
+			print(e);
+		}
+	}
+
+	void duSave() {
+		try {
+			SharedPreferences.Editor editor = preferences.edit();
+			for (String key : deployableUnits.keySet()) {
+				editor.putString("du:"+key, deployableUnits.get(key));
+			}
+			editor.apply();
+			editor.commit();
+		} catch(Exception e) {
+			print(e);
+		}
+	}
+
+	private static Map<String, String> alias = new HashMap<>();
+
+	private void aliasInit() {
+		try {
+			List<String> keys = new ArrayList<>();
+
+			for(Object key : preferences.getAll().keySet()) {
+				if(key instanceof String && ((String)key).startsWith("alias:")) {
+					keys.add(((String)key).split(":",2)[1]);
+				}
+			}
+
+			for(String key : keys) {
+				alias.put(key, preferences.getString("alias:"+key, ""));
+			}
+
+		} catch(Exception e) {
+			print(e);
+		}
+	}
+
+	private void aliasSave() {
+		try {
+			SharedPreferences.Editor editor = preferences.edit();
+			for (String key : alias.keySet()) {
+				editor.putString("alias:"+key, alias.get(key));
+			}
+			editor.apply();
+			editor.commit();
+		} catch(Exception e) {
+			print(e);
+		}
+	}
+
 	@Override
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
 		setContentView(R.layout.main);
-
-		tmp = new File(Environment.getExternalStorageDirectory(), "tmp");
 
 		webView = this.findViewById(R.id.text);
 		webView.getSettings().setJavaScriptEnabled(true);
@@ -60,38 +119,31 @@ public class MainActivity extends Activity
 		webView.setWebViewClient(new MyWebViewClient());
 
 		handler = new HtmlHandler(webView);
-		print("<h1>MyIDioT v0.0.3</h1>");
-		print("<p>A. Polverini (2018)</p>");
-		
-		topdir = new File(Environment.getExternalStorageDirectory(), "tmp");
-		
-		settings = new Settings();
-		settings.load();
+		print("<h1>MyIDioT v0.1.8</h1>");
+		print("A. Polverini (2018)<br>");
 
-		dudir = new File(topdir, "du");
+		preferences = getPreferences(Context.MODE_PRIVATE);
+
+		rootdir = new File(Environment.getExternalStorageDirectory(), preferences.getString("rootdir", "tmp"));
+
+		dudir = new File(rootdir, "du");
 		if(!dudir.exists()) {
 			dudir.mkdirs();
 		}
-		
-		List<String> keys = new ArrayList<>();
-		for(Object key : settings.getProperties().keySet()) {
-			if(key instanceof String && ((String)key).startsWith("alias:")) {
-				keys.add(((String)key).substring(6));
-			}
-		}
 
-		for(String key : keys) {
-			alias.put(key, settings.getProperty("alias:"+key, ""));
-			
-		}
-		root = new Item();
+		aliasInit();
+		aliasSave();
+
+		duInit();
+		duSave();
+
 	}
 
 	@Override 
 	protected void onDestroy() { 
 		super.onDestroy(); 
 	}
-	
+
 	@Override
 	public void onBackPressed() {
 		if (webView.canGoBack()) {
@@ -101,55 +153,42 @@ public class MainActivity extends Activity
 		}
 	}
 
-	public void createSubMenu(Menu menu, String submenuName, String[] submenuItems) {
-		SubMenu submenu = menu.addSubMenu(Menu.NONE, Menu.NONE, Menu.NONE, submenuName);
-		for(String itemName : submenuItems) {
-			submenu.add(Menu.NONE, Menu.NONE, Menu.NONE, itemName);
-		}
-	}
-	
-	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		getMenuInflater().inflate(R.menu.main, menu);
-		this.menu = menu;
-		
+	void componentsMenu(Menu menu) {
+
 		List<String> components = new ArrayList<>();
-		for(Object key : settings.getProperties().keySet()) {
+		for(Object key : preferences.getAll().keySet()) {
 			if(key instanceof String && ((String)key).startsWith("du:")) {
 				components.add(((String)key).substring(3));
 			}
 		}
-		
-		SubMenu a = menu.addSubMenu(Menu.NONE, Menu.NONE, Menu.NONE, "Components");
+
+		SubMenu submenu = menu.addSubMenu(Menu.NONE, Menu.NONE, Menu.NONE, "Components");
 		for(String component : components) {
-			MenuItem b = a.add(Menu.NONE, Menu.NONE, Menu.NONE, component);
+			submenu.add(Menu.NONE, Menu.NONE, Menu.NONE, component);
 		}
+	}
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getMenuInflater().inflate(R.menu.main, menu);
+		this.menu = menu;
+		componentsMenu(menu);
 		return true;
 	}
 
 	@Override public boolean onOptionsItemSelected(MenuItem item) {
 		switch (item.getItemId()) {
 			case R.id.LOGIN:
-				authenticateDialog();
-				return true;
-			case R.id.SETTINGS:
-				settingsDialog();
 				return true;
 			case R.id.DOWNLOAD:
-				downloadDialog();
+				new DownloadTask().execute();
 				return true;
 			case R.id.DISPLAY:
-				try {
-					Intent intent = new Intent(this, DisplayActivity.class);
-					intent.putExtra(EXTRA_ITEM, root);
-					startActivity(intent);
-				} catch(Exception e) {
-					print(e);
-				}
+				startDisplayActivity();
 				return true;
 			default:
-				if(settings.getProperties().containsKey("du:"+item.getTitle())) {
-					String url = settings.getProperty("du:"+item.getTitle(), "");
+				if(deployableUnits.containsKey(item.getTitle())) {
+					String url = deployableUnits.get(item.getTitle());
 					String name = url.substring(url.lastIndexOf("/")+1);
 					new LoadTask().execute(name);
 					return true;
@@ -157,18 +196,16 @@ public class MainActivity extends Activity
 				return super.onOptionsItemSelected(item);
 		}
 	}
-	
+
 	public String getNexusURL(String component, String build) {
-		String nexus = settings.getProperty("nexusurl",NEXUS);
 		String du = component+"."+component.substring(component.lastIndexOf('.')+1)+"DU";
-		String url = nexus + "/" + component.replaceAll("\\.","/") + "/" + du + "/" + build + "/" + du + "-" + build + "-wiring.xml";
+		String url = NEXUS + "/" + component.replaceAll("\\.","/") + "/" + du + "/" + build + "/" + du + "-" + build + "-wiring.xml";
 		return url;
 	}
 
 	public String getGitURL(String repository, String branch, String path) {
-		String git = settings.getProperty("giturl",GIT);
 		String filename = path.replaceAll("/","!");
-		return String.format("%s/%s.git/%s/%s", git, repository, branch, filename);
+		return String.format("%s/%s.git/%s/%s", GIT, repository, branch, filename);
 	}
 
 	public boolean checkURL(String url) {
@@ -185,54 +222,96 @@ public class MainActivity extends Activity
 		}
 		return false;
 	}
-	
-	public class DisplayActivity extends Activity {
-		
-		private DrawableView view;
-		private File topdir;
-		private File logdir;
+
+	private void startDisplayActivity() {
+		try {
+			Intent intent = new Intent(this, DisplayActivity.class);
+			intent.putExtra(EXTRA_ITEM, root);
+			startActivity(intent);
+		} catch(Exception e) {
+			print(e);
+		}
+	}
+
+	public static class PreferencesActivity extends Activity {
+
+		@Override
+		protected void onCreate(Bundle savedInstanceState) {
+			super.onCreate(savedInstanceState);
+			setContentView(R.layout.main);
+		}
+
+	}
+
+	public static class DisplayActivity extends Activity {
+
 		private Logger log;
-		
+		private DrawableView view;
+
+		private String aliasGet(String name) {
+			try {
+				String key = name.substring(0, name.lastIndexOf("."));
+				if(log!=null) {
+					log.print("key="+key+"\n");
+				}
+				if(alias.containsKey(key)){
+					if(log!=null) {
+						log.print("yes\n");
+					}
+					return name.replaceFirst(key, alias.get(key));
+				}
+			} catch(Exception e) {
+				if(log!=null) {
+					log.print(e.getClass().getSimpleName()+"\n");
+				}
+			}
+			return name;
+		}
+
 		@Override
 		protected void onCreate(Bundle savedInstanceState) {
 			super.onCreate(savedInstanceState);
 
-			topdir = new File(Environment.getExternalStorageDirectory(), "tmp");
-
-			logdir = new File(topdir, "logs");
+			File logdir = new File(Environment.getExternalStorageDirectory(), "tmp/logs");
 			if(!logdir.exists()) {
 				logdir.mkdirs();
 			}
-			
-			setContentView(view = new DrawableView(this));
 
 			try {
 				log = new Logger(new File(logdir, "log.txt"));
+			} catch(Exception e) {
+				Toast.makeText(this, "can't get a Logger instance!", Toast.LENGTH_LONG).show();
+			}
+
+			setContentView(view = new DrawableView(this));
+
+			try {
 				Intent intent = getIntent();
 				Item item = (Item) intent.getSerializableExtra(EXTRA_ITEM);
-			
-				int x = 500;
-				int y = 200;
-				for(Item du : item.getChildren()) {
-					DeployableUnit deployableUnit =new DeployableUnit(du,x, y);
-					Item c = du.getChild("composition");
-					if(c!=null) {
-						Composition composition = new Composition(c, x+500, y+100 );
-						if(composition!=null) {
-							Rect cBounds = composition.getBounds();
-							y = cBounds.bottom + 200;
-							Rect duBounds = deployableUnit.getBounds();
-							duBounds.bottom = cBounds.bottom + 100;
-							deployableUnit.setBounds(duBounds);
+				if(item!=null) {
+					int x = 500;
+					int y = 200;
+					for(Item du : item.getChildren()) {
+						DeployableUnit deployableUnit = new DeployableUnit(du,x, y);
+						Item c = du.getChild("composition");
+						if(c!=null) {
+							Composition composition = new Composition(c, x+500, y+100 );
+							if(composition!=null) {
+								Rect b = composition.getBounds();
+								y = b.bottom + 300;
+								Rect duBounds = deployableUnit.getBounds();
+								duBounds.bottom = b.bottom + 250;
+								deployableUnit.setBounds(duBounds);
+							}
+							composition.wiring();
 						}
-						composition.wiring();
 					}
 				}
 			} catch(Exception e) {
 				if(log!=null) log.print(e);
-			} finally {
-				if(log!=null) log.close();
 			}
+
+			if(log!=null) log.close();
 		}
 
 		public class Text extends ShapeDrawable {
@@ -255,7 +334,7 @@ public class MainActivity extends Activity
 			}
 
 		}
-		
+
 		public class LineShape extends Shape
 		{
 			private int x1;
@@ -288,7 +367,7 @@ public class MainActivity extends Activity
 				canvas.drawLine(x1, y1, x2, y2, paint);
 			}
 		}
-		
+
 		public class Line extends ShapeDrawable {
 			public Line(int x1, int y1, int x2, int y2, int color) {
 				super(new LineShape(x1,y1,x2,y2));
@@ -400,13 +479,32 @@ public class MainActivity extends Activity
 			}
 		}
 
-		public class DisplayLogger extends Logger
+		public class Logger extends PrintWriter
 		{
+			private File file;
 
-			public DisplayLogger(File file) throws FileNotFoundException {
-				super(file);
+			public Logger(File file) throws FileNotFoundException {
+				super(new FileOutputStream(file));
+				println("log"+file.getAbsolutePath());
+				this.file = file;
 			}
-			
+
+			public void print(String fmt, Object... args) {
+				println(String.format(fmt, args));
+			}
+
+			public void print(Exception e) {
+				print(e.getClass().getSimpleName()+" "+e.getMessage()+"\n");
+				if(true) {
+					StringWriter sw = new StringWriter();
+					PrintWriter pw = new PrintWriter(sw);
+					e.printStackTrace(pw);
+					pw.close();
+					String s = sw.getBuffer().toString();
+					print("%s\n", s);
+				}
+			}
+
 			public void print(Item item) {
 				if(item==null) return;
 				String type = item.getType();
@@ -466,27 +564,6 @@ public class MainActivity extends Activity
 		private int YELLOW = 0xfff9ca33;
 		private int ORANGE = 0xfff79433;
 		private int VIOLET = 0xff6b346a;
-
-		public String shortName(String name) {
-			if(name.startsWith("esa.egscc.kernel.timing")) {
-				name = name.replaceFirst("esa.egscc.kernel.timing", "KE-TIM");
-				if(name.contains(".egsccTiming.")) {
-					name = name.replaceFirst(".egsccTiming.", ".EGSCC.");
-				} else if(name.contains(".groundSystemTiming.")) {
-					name = name.replaceFirst(".groundSystemTiming.", ".GROUND.");
-				} else if(name.contains(".timeSimulation.")) {
-					name = name.replaceFirst(".timeSimulation.", ".SIMULATION.");
-				} else if(name.contains(".timingCommon.")) {
-					name = name.replaceFirst(".timingCommon.", ".COMMON.");
-				}
-			} else if(name.startsWith("esa.egscc.kernel.sharedLibraries.timeProcessing")) {
-				name = name.replaceFirst("esa.egscc.kernel.sharedLibraries.timeProcessing", "SHL-TIME");
-				if(name.contains(".timeProcessing.")) {
-					name = name.replaceFirst(".timeProcessing.", ".PROCESSING.");
-				}
-			}
-			return name;
-		}
 
 		public String lastName(String name) {
 			return name.substring(name.lastIndexOf(".")+1);
@@ -615,16 +692,12 @@ public class MainActivity extends Activity
 						view.add(componentPort);
 						consumerPorts.add(new ComponentPort(componentPort, consumerID, serviceClass));
 						if(consumerID!=null) {
-							Text labelConsumerID = new Text(x - 20, y + 10, 400, 12, 0xff202080, shortName(consumerID), 12.0f, Paint.Align.RIGHT);
+							Text labelConsumerID = new Text(x - 20, y + 10, 400, 12, 0xff202080, aliasGet(consumerID), 12.0f, Paint.Align.RIGHT);
 							view.add(labelConsumerID);
 							if(!port2labels.containsKey(componentPort)) port2labels.put(componentPort, new ArrayList<ShapeDrawable>());
 							port2labels.get(componentPort).add(labelConsumerID);
 							if (serviceClass != null) {
-								String key = serviceClass.substring(0, serviceClass.lastIndexOf("."));
-								if(alias.containsKey(key)){
-									serviceClass = serviceClass.replaceFirst(key, alias.get(key));
-								}
-								Text labelServiceClass = new Text(x-20, y+26, 400, 12, 0xff202080, serviceClass, 12.0f, Paint.Align.RIGHT);
+								Text labelServiceClass = new Text(x-20, y+26, 400, 12, 0xff202080, aliasGet(serviceClass), 12.0f, Paint.Align.RIGHT);
 								view.add(labelServiceClass);
 								if(!port2labels.containsKey(componentPort)) port2labels.put(componentPort, new ArrayList<ShapeDrawable>());
 								port2labels.get(componentPort).add(labelServiceClass);
@@ -653,16 +726,12 @@ public class MainActivity extends Activity
 						view.add(componentPort);
 						providerPorts.add(new ComponentPort(componentPort, providerID, serviceClass));
 						if(providerID!=null) {
-							Text labelProviderID = new Text(x+20, y+12, 400, 12, 0xff202080, shortName(providerID), 12.0f, Paint.Align.LEFT);
+							Text labelProviderID = new Text(x+20, y+12, 400, 12, 0xff202080, aliasGet(providerID), 12.0f, Paint.Align.LEFT);
 							view.add(labelProviderID);
 							if(!port2labels.containsKey(componentPort)) port2labels.put(componentPort, new ArrayList<ShapeDrawable>());
 							port2labels.get(componentPort).add(labelProviderID);
 							if(serviceClass!=null) {
-								String key = serviceClass.substring(0, serviceClass.lastIndexOf("."));
-								if(alias.containsKey(key)){
-									serviceClass = serviceClass.replaceFirst(key, alias.get(key));
-								}
-								Text labelServiceClass = new Text(x+20, y+26, 400, 12, 0xff202080, serviceClass, 12.0f, Paint.Align.LEFT);
+								Text labelServiceClass = new Text(x+20, y+26, 400, 12, 0xff202080, aliasGet(serviceClass), 12.0f, Paint.Align.LEFT);
 								view.add(labelServiceClass);
 								if(!port2labels.containsKey(componentPort)) port2labels.put(componentPort, new ArrayList<ShapeDrawable>());
 								port2labels.get(componentPort).add(labelServiceClass);
@@ -677,11 +746,9 @@ public class MainActivity extends Activity
 				}
 
 				view.add(new Rectangle(px, py, pw, ph, 0xff808080));
-
 			}
 
 			public void wiringProviders(Composition composition) {
-
 				for(ComponentPort providerPort : providerPorts) {
 					Rectangle componentPort = providerPort.port;
 					String providerID = providerPort.consumerID;
@@ -691,19 +758,12 @@ public class MainActivity extends Activity
 						if(compositionPort!=null) {
 							if(!moved.contains(compositionPort)) {
 								Rect b1 = compositionPort.getBounds();
-								if(log!=null) log.print("b1.top="+b1.top+"\n");
-
 								Rect b2 = componentPort.getBounds();
-								if(log!=null) log.print("b2.top="+b2.top+"\n");
-
 								int dy = b2.top-b1.top;
-								if(log!=null) log.print("dy="+dy+"\n");
-
 								compositionPort.setBounds(new Rect(b1.left, b2.top, b1.right, b2.bottom));
 								for(ShapeDrawable label : port2labels.get(compositionPort)) {
 									Rect b3 = label.getBounds();
 									label.setBounds(new Rect(b3.left, b3.top+dy, b3.right, b3.bottom+dy));
-									if(log!=null) log.print("move composition provider port label from "+b3.top+" to "+(b3.top+dy)+"\n");
 								}
 								moved.add(compositionPort);
 								composition.setProviderPort(serviceClass, compositionPort);
@@ -714,19 +774,12 @@ public class MainActivity extends Activity
 								ShapeDrawable duport = duProviderShapes.get(serviceClass);
 								if(!moved.contains(duport)) {
 									Rect b1 = duport.getBounds();
-									if(log!=null) log.print("b1.top="+b1.top+"\n");
-
 									Rect b2 = compositionPort.getBounds();
-									if(log!=null) log.print("b2.top="+b2.top+"\n");
-
 									int dy = b2.top-b1.top;
-									if(log!=null) log.print("dy="+dy+"\n");
-
 									duport.setBounds(new Rect(b1.left, b2.top, b1.right, b2.bottom));
 									for(ShapeDrawable label : port2labels.get(duport)) {
 										Rect b3 = label.getBounds();
 										label.setBounds(new Rect(b3.left, b3.top+dy, b3.right, b3.bottom+dy));
-										if(log!=null) log.print("move du provider port label from "+b3.top+" to "+(b3.top+dy)+"\n");
 									}
 									moved.add(duport);
 								}
@@ -739,7 +792,6 @@ public class MainActivity extends Activity
 			}
 
 			public void wiringConsumers(Composition composition) {
-
 				for(ComponentPort consumerPort : consumerPorts) {
 					Rectangle componentPort = consumerPort.port;
 					String consumerID = consumerPort.consumerID;
@@ -776,7 +828,6 @@ public class MainActivity extends Activity
 								duConsumerIX += 10;
 								addPathLine(duport, compositionPort, duConsumerIX, colors[icolor]);
 							} else {
-
 								selfConsumerIX+=10;
 								int dx = 200 - selfConsumerIX;
 								int dy = composition.getBounds().bottom+dx;
@@ -807,13 +858,11 @@ public class MainActivity extends Activity
 
 			Map<String, ShapeDrawable>  providerPorts = new HashMap<>();
 
-			public void setProviderPort(String serviceClass, ShapeDrawable compositionPort)
-			{
+			public void setProviderPort(String serviceClass, ShapeDrawable compositionPort) {
 				providerPorts.put(serviceClass, compositionPort);
 			}
 
-			public ShapeDrawable getProviderPort(String serviceClass)
-			{
+			public ShapeDrawable getProviderPort(String serviceClass) {
 				return providerPorts.get(serviceClass);
 			}
 
@@ -852,7 +901,7 @@ public class MainActivity extends Activity
 						String consumerID = child.getProperty("consumerId");
 						if(consumerID!=null) {
 							consumerShapes.put(consumerID, compositionPort);
-							Text labelConsumerID = new Text(x-20, y+10, 400, 20, 0xff202080, shortName(consumerID), 12.0f, Paint.Align.RIGHT);
+							Text labelConsumerID = new Text(x-20, y+10, 400, 20, 0xff202080, aliasGet(consumerID), 12.0f, Paint.Align.RIGHT);
 							view.add(labelConsumerID);
 							if(!port2labels.containsKey(compositionPort)) port2labels.put(compositionPort, new ArrayList<ShapeDrawable>());
 							port2labels.get(compositionPort).add(labelConsumerID);
@@ -879,7 +928,7 @@ public class MainActivity extends Activity
 						String providerID = child.getProperty("providerId");
 						if(providerID!=null) {
 							providerShapes.put(providerID, compositionPort);
-							Text labelProviderID = new Text(x+20, y+10, 400, 20, 0xff202080, shortName(providerID), 12.0f, Paint.Align.LEFT);
+							Text labelProviderID = new Text(x+20, y+10, 400, 20, 0xff202080, aliasGet(providerID), 12.0f, Paint.Align.LEFT);
 							view.add(labelProviderID);
 							if(!port2labels.containsKey(compositionPort)) port2labels.put(compositionPort, new ArrayList<ShapeDrawable>());
 							port2labels.get(compositionPort).add(labelProviderID);
@@ -990,10 +1039,7 @@ public class MainActivity extends Activity
 							if(log!=null) {
 								log.print("add="+serviceClass+"\n");
 							}
-							String key = serviceClass.substring(0, serviceClass.lastIndexOf("."));
-							if(alias.containsKey(key)){
-								serviceClass = serviceClass.replaceFirst(key, alias.get(key));
-							}
+							serviceClass = aliasGet(serviceClass);
 							Text labelServiceClass = new Text(x-20, y+25, 500, 20, 0xff202080, serviceClass, 20.0f, Paint.Align.RIGHT);
 							view.add(labelServiceClass);
 							if(!port2labels.containsKey(duPort)) port2labels.put(duPort, new ArrayList<ShapeDrawable>());
@@ -1022,10 +1068,7 @@ public class MainActivity extends Activity
 						String serviceClass = child.getProperty("serviceClass");
 						if(serviceClass!=null) {
 							duProviderShapes.put(serviceClass, duPort);
-							String key = serviceClass.substring(0, serviceClass.lastIndexOf("."));
-							if(alias.containsKey(key)){
-								serviceClass = serviceClass.replaceFirst(key, alias.get(key));
-							}
+							serviceClass = aliasGet(serviceClass);
 							Text labelServiceClass = new Text(x+20, y+25, 500, 20, 0xff202080, serviceClass, 20.0f, Paint.Align.LEFT);
 							view.add(labelServiceClass);
 							if(!port2labels.containsKey(duPort)) port2labels.put(duPort, new ArrayList<ShapeDrawable>());
@@ -1043,24 +1086,29 @@ public class MainActivity extends Activity
 				view.add(duRectangle = new Rectangle(px, py, pw, ph, 0xffd8d8d8));
 			}
 		}
+
 	}
-	
+
 	private class DownloadTask extends AsyncTask {
 
 		@Override
 		protected Object doInBackground(Object[] args) {
-			if(args!=null && args.length>0) {
-				if(verbose) println("downloading...");
+			if(args.length>0) {
 				try {
-					for(int i = 0; i<args.length; i++) {
-						if(args[i] instanceof String) {
-							download((String)args[i]);
-						}
+					for(Object arg : args) {
+						download((String)arg);
 					}
 				} catch(Exception e) {
 					print(e);
 				}
-				if(verbose) println("downloading completed!");
+			} else {
+				for(String key : deployableUnits.keySet()) {
+					try {
+						download(deployableUnits.get(key));
+					} catch(Exception e) {
+						print(e);
+					}
+				}
 			}
 			return null;
 		}
@@ -1072,9 +1120,19 @@ public class MainActivity extends Activity
 
 		public void download(String url) throws ConnectException {
 			try {
+
+				String dir = "du";
+				if(url.endsWith(".uml")) {
+					dir = "uml";
+				}
+
 				String name = url.substring(url.lastIndexOf("/")+1);
-				if(verbose) println("downloading %s ...", name);
-				File file = new File(dudir, name);
+				if(name.startsWith("model!uml2!")) {
+					name = name.replaceFirst("model!uml2!", "");
+				}
+
+				File file = new File(new File(rootdir, dir), name);
+
 				file.getParentFile().mkdirs();
 				PrintWriter out = new PrintWriter(new FileOutputStream(file));
 				BufferedReader reader = new BufferedReader(new InputStreamReader(((HttpURLConnection)(new URL(url).openConnection())).getInputStream(), Charset.forName("UTF-8")));
@@ -1086,9 +1144,9 @@ public class MainActivity extends Activity
 				out.close();
 			} catch(Exception e) {
 				if(e.getMessage().startsWith("Server returned HTTP response code: 401")) {
-					print(new Error("download: UNAUTHORIZED (%s)!",url));
+					print(new Error("XML download: UNAUTHORIZED (%s)!",url));
 				} else  if(e.getMessage().startsWith("Server returned HTTP response code: 400")) {
-					print(new Error("download: BAD REQUEST (%s)!",url));
+					print(new Error("XML download: BAD REQUEST (%s)!",url));
 				} else  if(e.getMessage().startsWith("Connection timed out: connect")) {
 					throw new ConnectException(e.getMessage());
 				} else {
@@ -1097,7 +1155,7 @@ public class MainActivity extends Activity
 			}
 		}
 	}
-	
+
 	private class LoadTask extends AsyncTask<String, Integer, List<Item>> {
 
 		@Override
@@ -1119,8 +1177,10 @@ public class MainActivity extends Activity
 		protected void onPostExecute(List<Item> items) {
 			super.onPostExecute(items);
 			try {
-				for(Item item : items) {
-					root.addChild(item);
+				if(items!=null) {
+					for(Item item : items) {
+						item.setParent(root);
+					}
 				}
 			} catch(Exception e) {
 				print(e);
@@ -1308,45 +1368,7 @@ public class MainActivity extends Activity
 			print("</li>");
 		}
 	}
-	
-	private class MyResourceParser {
 
-		private Context context;
-		
-		public MyResourceParser(Context context) {
-			this.context = context;
-			load(R.xml.test1);
-			load(R.xml.test1);
-			load(R.xml.test1);
-		}
-		
-		public void load(int resourceId) {
-			try {
-				XmlResourceParser xrp = context.getResources().getXml(resourceId);
-				xrp.next();
-				int eventType = xrp.getEventType();
-				while (eventType != XmlPullParser.END_DOCUMENT) {
-					if (eventType == XmlPullParser.START_TAG) {
-						switch(xrp.getName()) {
-						case "deployableUnit": {
-							String group = xrp.getAttributeValue(null, "group");
-							String id = xrp.getAttributeValue(null, "id");
-							String name = xrp.getAttributeValue(null, "name");
-							break;
-							}
-						default:
-							break;
-						}
-						break;
-					}
-					eventType = xrp.next();
-				}
-			} catch(Exception e) {
-				print(e);
-			}
-		}
-	}
-	
 	public static class Item implements Serializable {
 
 		public static final long serialversionUID = 1L;
@@ -1398,7 +1420,7 @@ public class MainActivity extends Activity
 				index.put(child.getName(), child);
 			}
 		}
-		
+
 		private void removeChild(Item child) {
 			children.remove(child);
 			child.parent = null;
@@ -1406,7 +1428,7 @@ public class MainActivity extends Activity
 				index.remove(child.getName());
 			}
 		}
-		
+
 		public boolean hasChildren() {
 			return children.size()>0;
 		}
@@ -1477,79 +1499,8 @@ public class MainActivity extends Activity
 		public void setProperty(String key, String value) {
 			properties.setProperty(key, value);
 		}
-
 	}
-	
-	public class Settings {
-		
-		private static final String TAG = "Settings";
-		
-		private final Properties properties = new Properties();
-		private final File file = new File(topdir, ".idiot.xml");
 
-		public void load() {
-			try {
-				if(verbose) println(TAG+".load()..."+file.getAbsolutePath());
-				properties.loadFromXML(new FileInputStream(file));
-			} catch (Exception e) {
-				// first execution
-				// print(e);
-				setProperty("giturl", GIT);
-				setProperty("nexusurl", NEXUS);
-				save();
-			}
-		}
-
-		public void save() {
-			try {
-				if(verbose) println(TAG+".save()..."+file.getAbsolutePath());
-				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-				properties.storeToXML(new FileOutputStream(file), sdf.format(System.currentTimeMillis()));
-			} catch (Exception e) {
-				print(e);
-			}
-		}
-
-		public String getProperty(String key, String defaultValue)  {
-			return properties.getProperty(key, defaultValue);
-		}
-
-		public void setProperty(String key, String value)  {
-			properties.setProperty(key, value);
-		}
-		
-		public Properties getProperties() {
-			return properties;
-		} 
-
-	}
-	
-	public static class Logger  extends PrintWriter
-	{
-		private File file;
-
-		public Logger(File file) throws FileNotFoundException {
-			super(new FileOutputStream(file));
-			this.file = file;
-		}
-
-		public void print(String fmt, Object... args) {
-			println(String.format(fmt, args));
-		}
-
-		public void print(Exception e) {
-			print(e.getClass().getSimpleName()+" "+e.getMessage()+"\n");
-			if(true) {
-				StringWriter sw = new StringWriter();
-				PrintWriter pw = new PrintWriter(sw);
-				e.printStackTrace(pw);
-				pw.close();
-				String s = sw.getBuffer().toString();
-				print("%s\n", s);
-			}
-		}
-	}
-	
 	public class Warning extends Exception {
 		public Warning(String fmt, Object... args) {
 			super(String.format(fmt,args));
@@ -1561,7 +1512,7 @@ public class MainActivity extends Activity
 			super(String.format(fmt,args));
 		}
 	}
-	
+
 	public void print(Exception e, String fmt, Object... args) {
 		String s = String.format(fmt, args);
 		String color = "red";
@@ -1591,7 +1542,7 @@ public class MainActivity extends Activity
 	public void println(String fmt, Object... args) {
 		print(fmt+"<br>",args);
 	}
-	
+
 	public class HtmlHandler extends Handler {
 
 		private WebView view;
@@ -1617,7 +1568,7 @@ public class MainActivity extends Activity
 			}
 		}
 	}
-	
+
 	public class MyWebViewClient extends WebViewClient {
 		@Override
 		public boolean shouldOverrideUrlLoading(WebView view, String url) {
@@ -1625,120 +1576,6 @@ public class MainActivity extends Activity
 			return true;
 		}
 	}
-	
-	public void downloadDialog() {
-		LayoutInflater layout = LayoutInflater.from(this);
-        View view = layout.inflate(R.layout.login, null);
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setView(view);
-        
-		final EditText componentText = view.findViewById(R.id.DOWNLOAD_COMPONENT);
-        final EditText urlText = view.findViewById(R.id.DOWNLOAD_URL);
-        
-		builder.setTitle("DOWNLOAD");
-        builder.setCancelable(false).setPositiveButton("OK", new DialogInterface.OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int id) {
-					try {
-						final String component = componentText.getText().toString();
-						final String url = urlText.getText().toString();
-						if(component==null || url==null) { 
-							Toast.makeText(MainActivity.this,"Invalid component or url", Toast.LENGTH_LONG).show();
-							downloadDialog();
-							return;
-						}
-						settings.setProperty("du:"+component, url);
-						settings.save();
-						new DownloadTask().execute(url);
-					} catch(Exception e) {
-						Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_LONG).show();
-					}
-				}
-			});
-		builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int id) {                       
-					dialog.cancel();
-				}
-			});
-		builder.show();                                     
-    }
-	
-	public void settingsDialog() {
-
-		LayoutInflater layout = LayoutInflater.from(this);
-        View view = layout.inflate(R.layout.config, null);
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setView(view);
-
-        final EditText gitText = view.findViewById(R.id.GIT_URL);
-		gitText.setText(settings.getProperty("giturl", ""));
-
-        final EditText nexusText = view.findViewById(R.id.NEXUS_URL);
-		nexusText.setText(settings.getProperty("nexusurl", ""));
-
-		builder.setTitle("SETTINGS");
-        builder.setCancelable(false).setPositiveButton("OK", new DialogInterface.OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int id) {
-					try {
-						String giturl = gitText.getText().toString();
-						String nexusurl = nexusText.getText().toString();
-						if(giturl==null || nexusurl==null) { 
-							Toast.makeText(MainActivity.this,"Invalid URL", Toast.LENGTH_LONG).show();
-							settingsDialog();
-							return;
-						}
-						settings.setProperty("giturl", giturl);
-						settings.setProperty("nexusurl", nexusurl);
-						settings.save();
-					} catch(Exception e) {
-						Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_LONG).show();
-					}
-				}
-			});
-		builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int id) {                       
-					dialog.cancel();
-				}
-			});
-		builder.show();                                     
-    }
-	
-	public void authenticateDialog() {
-		LayoutInflater layout = LayoutInflater.from(this);
-        View view = layout.inflate(R.layout.login, null);
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setView(view);
-        final EditText user = view.findViewById(R.id.USERNAME);
-        final EditText pass = view.findViewById(R.id.PASSWORD);
-		builder.setTitle("LOGIN");
-        builder.setCancelable(false).setPositiveButton("OK", new DialogInterface.OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int id) {
-					try {
-						final String password = pass.getText().toString();
-						final String username = user.getText().toString();
-						if(username==null || password==null) { 
-							Toast.makeText(MainActivity.this,"Invalid username or password", Toast.LENGTH_LONG).show();
-							authenticateDialog();
-							return;
-						}
-						authenticate(username, password);
-					} catch(Exception e) {
-						Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_LONG).show();
-					}
-				}
-			});
-		builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int id) {                       
-					dialog.cancel();
-				}
-			});
-		builder.show();                                     
-    }
 
 	public void authenticate(final String user, final String pswd) {
 		Authenticator.setDefault(new Authenticator() {
@@ -1747,8 +1584,6 @@ public class MainActivity extends Activity
 					return new PasswordAuthentication(user, pswd.toCharArray());
 				}
 			});
-		MenuItem item = menu.findItem(R.id.LOGIN);
-		item.setIcon(getResources().getDrawable(R.drawable.user2));
 	}
-	
+
 }
