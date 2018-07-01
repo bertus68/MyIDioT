@@ -8,8 +8,8 @@
 		android:title="Refresh"/> 
 
     <item
-        android:id="@+id/SETTINGS"
-        android:title="Settings"/>
+        android:id="@+id/PREFERENCES"
+        android:title="Preferences"/>
 	
     <item
         android:id="@+id/DOWNLOAD"

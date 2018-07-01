@@ -26,7 +26,7 @@ public final class R {
         public static final int LOGIN=0x7f080007;
         public static final int NEXUS_URL=0x7f080001;
         public static final int PASSWORD=0x7f080005;
-        public static final int SETTINGS=0x7f080008;
+        public static final int PREFERENCES=0x7f080008;
         public static final int USERNAME=0x7f080004;
         public static final int text=0x7f080006;
     }
@@ -40,15 +40,31 @@ public final class R {
         public static final int main=0x7f070000;
     }
     public static final class string {
+        public static final int alias_default=0x7f05000e;
+        public static final int alias_key=0x7f05000d;
+        public static final int alias_summary=0x7f050010;
+        public static final int alias_title=0x7f05000f;
         public static final int app_name=0x7f050000;
+        public static final int du_default=0x7f05000a;
+        public static final int du_key=0x7f050009;
+        public static final int du_summary=0x7f05000c;
+        public static final int du_title=0x7f05000b;
         public static final int hello=0x7f050001;
+        public static final int rootdir_default=0x7f050006;
+        public static final int rootdir_key=0x7f050005;
+        public static final int rootdir_summary=0x7f050008;
+        public static final int rootdir_title=0x7f050007;
+        public static final int verbose_key=0x7f050002;
+        public static final int verbose_summary=0x7f050004;
+        public static final int verbose_title=0x7f050003;
     }
     public static final class style {
         public static final int AppTheme=0x7f060000;
     }
     public static final class xml {
-        public static final int test1=0x7f040000;
-        public static final int test2=0x7f040001;
-        public static final int test3=0x7f040002;
+        public static final int preferences=0x7f040000;
+        public static final int test1=0x7f040001;
+        public static final int test2=0x7f040002;
+        public static final int test3=0x7f040003;
     }
 }

@@ -17,6 +17,7 @@ import org.w3c.dom.*;
 import org.xml.sax.*;
 import android.widget.*;
 import android.content.SharedPreferences.*;
+import android.preference.*;
 
 public class MainActivity extends Activity 
 {
@@ -31,7 +32,9 @@ public class MainActivity extends Activity
 	private boolean verbose = true;
 	private File rootdir = null;
 	private File dudir = null;
-
+	private static final Map<String, String> deployableUnits = new HashMap<>();
+	private static Map<String, String> alias = new HashMap<>();
+	
 	// display
 	private Handler handler = null;
 	private WebView webView = null;
@@ -39,74 +42,7 @@ public class MainActivity extends Activity
 
 	// data
 	private Item root = new Item();
-
-	public static final Map<String, String> deployableUnits = new HashMap<>();
-
-	void duInit() {
-		try {
-			List<String> keys = new ArrayList<>();
-
-			for(Object key : preferences.getAll().keySet()) {
-				if(key instanceof String && ((String)key).startsWith("du:")) {
-					keys.add(((String)key).split(":",2)[1]);
-				}
-			}
-
-			for(String key : keys) {
-				deployableUnits.put(key, preferences.getString("du:"+key, ""));
-			}
-		} catch(Exception e) {
-			print(e);
-		}
-	}
-
-	void duSave() {
-		try {
-			SharedPreferences.Editor editor = preferences.edit();
-			for (String key : deployableUnits.keySet()) {
-				editor.putString("du:"+key, deployableUnits.get(key));
-			}
-			editor.apply();
-			editor.commit();
-		} catch(Exception e) {
-			print(e);
-		}
-	}
-
-	private static Map<String, String> alias = new HashMap<>();
-
-	private void aliasInit() {
-		try {
-			List<String> keys = new ArrayList<>();
-
-			for(Object key : preferences.getAll().keySet()) {
-				if(key instanceof String && ((String)key).startsWith("alias:")) {
-					keys.add(((String)key).split(":",2)[1]);
-				}
-			}
-
-			for(String key : keys) {
-				alias.put(key, preferences.getString("alias:"+key, ""));
-			}
-
-		} catch(Exception e) {
-			print(e);
-		}
-	}
-
-	private void aliasSave() {
-		try {
-			SharedPreferences.Editor editor = preferences.edit();
-			for (String key : alias.keySet()) {
-				editor.putString("alias:"+key, alias.get(key));
-			}
-			editor.apply();
-			editor.commit();
-		} catch(Exception e) {
-			print(e);
-		}
-	}
-
+	
 	@Override
     protected void onCreate(Bundle savedInstanceState)
     {
@@ -120,25 +56,70 @@ public class MainActivity extends Activity
 
 		handler = new HtmlHandler(webView);
 		print("<h1>MyIDioT v0.1.8</h1>");
-		print("A. Polverini (2018)<br>");
+		print("A. Polverini (2018)<p/>");
 
-		preferences = getPreferences(Context.MODE_PRIVATE);
+		preferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext()); 
+		preferences.registerOnSharedPreferenceChangeListener(new SharedPreferences.OnSharedPreferenceChangeListener() {
+				@Override
+				public void onSharedPreferenceChanged(SharedPreferences preferences, String key) {
+					updatePreference(preferences, key);
+				}
+			});
 
-		rootdir = new File(Environment.getExternalStorageDirectory(), preferences.getString("rootdir", "tmp"));
-
-		dudir = new File(rootdir, "du");
-		if(!dudir.exists()) {
-			dudir.mkdirs();
-		}
-
-		aliasInit();
-		aliasSave();
-
-		duInit();
-		duSave();
+		updatePreference(preferences, "verbose");
+		updatePreference(preferences, "rootdir");
+		updatePreference(preferences, "deployable");
+		updatePreference(preferences, "alias");
 
 	}
-
+	
+	private void updatePreference(SharedPreferences preferences, String key) {
+		try {
+			switch(key) {
+				case "verbose":
+					verbose = preferences.getBoolean("verbose", false);
+					println("%s = %s",key,verbose?"si":"no");
+					break;
+				case "rootdir":
+					rootdir = new File(Environment.getExternalStorageDirectory(), preferences.getString("rootdir", "tmp"));
+					if(verbose) println("%s = %s",key,rootdir.getAbsolutePath());
+					
+					dudir = new File(rootdir, "du");
+					if(!dudir.exists()) {
+						dudir.mkdirs();
+					}
+					break;
+				case "deployable":
+					if(verbose) println("%s:",key);
+					deployableUnits.clear();
+					for(String s : preferences.getString(key, "").trim().split("\n")) {
+						if(s.contains("=")) {
+							String[] l = s.split("=", 2);
+							if(verbose) println(" + %s = %s", l[0], l[1]);
+							deployableUnits.put(l[0], l[1]);
+						}
+					}
+					break;
+				case "alias":
+					if(verbose) println("%s:",key);
+					alias.clear();
+					for(String s : preferences.getString(key, "").trim().split("\n")) {
+						if(s.contains("=")) {
+							String[] l = s.split("=", 2);
+							if(verbose) println(" + %s = %s", l[0], l[1]);
+							alias.put(l[0], l[1]);
+						}
+					}
+					break;
+				default:
+					println("unexpected %s",key);
+					break;
+			}
+		} catch (Exception e) {
+			print(e);
+		}
+	}
+	
 	@Override 
 	protected void onDestroy() { 
 		super.onDestroy(); 
@@ -179,13 +160,17 @@ public class MainActivity extends Activity
 	@Override public boolean onOptionsItemSelected(MenuItem item) {
 		switch (item.getItemId()) {
 			case R.id.LOGIN:
-				return true;
+				authenticateDialog();
+				break;
+			case R.id.PREFERENCES:
+				startActivity(new Intent(this, MyPreferencesActivity.class));
+				break;
 			case R.id.DOWNLOAD:
 				new DownloadTask().execute();
-				return true;
+				break;
 			case R.id.DISPLAY:
 				startDisplayActivity();
-				return true;
+				break;
 			default:
 				if(deployableUnits.containsKey(item.getTitle())) {
 					String url = deployableUnits.get(item.getTitle());
@@ -195,8 +180,26 @@ public class MainActivity extends Activity
 				}
 				return super.onOptionsItemSelected(item);
 		}
+		return true;
 	}
+	
+	public static class MyPreferencesActivity extends PreferenceActivity {
 
+		@Override
+		protected void onCreate(Bundle savedInstanceState) { 
+			super.onCreate(savedInstanceState); 
+			getFragmentManager().beginTransaction().replace(android.R.id.content, new MyPreferenceFragment()).commit(); 
+		} 
+
+		public static class MyPreferenceFragment extends PreferenceFragment { 
+			@Override 
+			public void onCreate(final Bundle savedInstanceState) { 
+				super.onCreate(savedInstanceState); 
+				addPreferencesFromResource(R.xml.preferences); 
+			} 
+		} 
+	}
+	
 	public String getNexusURL(String component, String build) {
 		String du = component+"."+component.substring(component.lastIndexOf('.')+1)+"DU";
 		String url = NEXUS + "/" + component.replaceAll("\\.","/") + "/" + du + "/" + build + "/" + du + "-" + build + "-wiring.xml";
@@ -1576,7 +1579,41 @@ public class MainActivity extends Activity
 			return true;
 		}
 	}
-
+	
+	public void authenticateDialog() {
+		LayoutInflater layout = LayoutInflater.from(this);
+        View view = layout.inflate(R.layout.login, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setView(view);
+        final EditText user = view.findViewById(R.id.USERNAME);
+        final EditText pass = view.findViewById(R.id.PASSWORD);
+		builder.setTitle("LOGIN");
+        builder.setCancelable(false).setPositiveButton("OK", new DialogInterface.OnClickListener() {
+				@Override
+				public void onClick(DialogInterface dialog, int id) {
+					try {
+						final String password = pass.getText().toString();
+						final String username = user.getText().toString();
+						if(username==null || password==null) { 
+							Toast.makeText(MainActivity.this,"Invalid username or password", Toast.LENGTH_LONG).show();
+							authenticateDialog();
+							return;
+						}
+						authenticate(username, password);
+					} catch(Exception e) {
+						Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_LONG).show();
+					}
+				}
+			});
+		builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+				@Override
+				public void onClick(DialogInterface dialog, int id) {                       
+					dialog.cancel();
+				}
+			});
+		builder.show();                                     
+    }
+	
 	public void authenticate(final String user, final String pswd) {
 		Authenticator.setDefault(new Authenticator() {
 				@Override
@@ -1584,6 +1621,8 @@ public class MainActivity extends Activity
 					return new PasswordAuthentication(user, pswd.toCharArray());
 				}
 			});
+		MenuItem item = menu.findItem(R.id.LOGIN);
+		item.setIcon(getResources().getDrawable(R.drawable.user2));
 	}
 
 }

@@ -4,4 +4,23 @@
     <string name="app_name">MyIDioT</string>
     <string name="hello">Hello!</string>
 
+	<string name="verbose_key">verbose</string>
+	<string name="verbose_title">verbose</string>
+	<string name="verbose_summary">if true then log verbosely</string>
+
+	<string name="rootdir_key">rootdir</string>
+	<string name="rootdir_default">tmp</string>
+	<string name="rootdir_title">root directory</string>
+	<string name="rootdir_summary">the root directory</string>
+
+	<string name="du_key">deployable</string>
+	<string name="du_default"></string>
+	<string name="du_title">Deployable Units</string>
+	<string name="du_summary">name=wiring</string>
+
+	<string name="alias_key">alias</string>
+	<string name="alias_default"></string>
+	<string name="alias_title">Alias</string>
+	<string name="alias_summary">name=alias</string>
+	
 </resources>
